@@ -78,81 +78,89 @@ body {font-family:Arial;}
 	
 	<br><br><br><br><br><br><br><br><br>
 	
-			<form action="<?=$_SERVER['PHP_SELF']?>" method="post">
-					<p>
-						<label for="start">Start Date:</label>
-						<input type="date" name="start">
-					</p>
-					<p>
-						<label for="end">End Date:</label>
-						<input type="date" name="end">
-					</p>
-				
-			<input type="submit" name="submit" value="View Records">
-			</form>	
-	
-	<?php
-	include "config.php";
-		if(isset($_POST['submit'])) {
+		<?php
+		$start = isset($_POST['start']) ? $_POST['start'] : '';
+		$end   = isset($_POST['end']) ? $_POST['end'] : '';
+		?>
+		<form action="<?= htmlspecialchars($_SERVER['PHP_SELF']) ?>" method="post">
+				<p>
+					<label for="start">Start Date:</label>
+					<input type="date" name="start" id="start" value="<?= htmlspecialchars($start) ?>" required>
+				</p>
+				<p>
+					<label for="end">End Date:</label>
+					<input type="date" name="end" id="end" value="<?= htmlspecialchars($end) ?>" required>
+				</p>
 			
-			$start=$_POST['start'];
-			$end=$_POST['end'];
-			$res=mysqli_query($conn,"SELECT P_AMT('$start','$end') AS PAMT") or die(mysqli_error($conn));
-			while($row=mysqli_fetch_array($res))
-			{
-				$pamt=$row['PAMT'];
-				
+		<input type="submit" name="submit" value="View Records">
+		</form>	
+	</center>
+	
+<?php
+include "config.php";
+
+if (isset($_POST['submit'])) {
+
+	$validDate = function ($d) {
+		$dt = DateTime::createFromFormat('Y-m-d', $d);
+		return $dt && $dt->format('Y-m-d') === $d;
+	};
+
+	if (!$validDate($start) || !$validDate($end)) {
+		echo "<p style='text-align:center; color:red;'>Please select a valid start and end date.</p>";
+	} elseif ($start > $end) {
+		echo "<p style='text-align:center; color:red;'>Start date cannot be after the end date.</p>";
+	} else {
+
+		// Purchases in range
+		$stmt = $conn->prepare("SELECT p_id, sup_id, med_id, p_qty, p_cost, pur_date FROM purchase
+				WHERE pur_date BETWEEN ? AND ? ORDER BY pur_date");
+		$stmt->bind_param("ss", $start, $end);
+		$stmt->execute();
+		$result = $stmt->get_result();
+		$pamt = 0;
+?>
+	<table align="right" id="table1" style="margin-right:100px;">
+		<tr>
+			<th>Purchase ID</th>
+			<th>Supplier ID</th>
+			<th>Medicine ID</th>
+			<th>Quantity</th>
+			<th>Date of Purchase</th>
+			<th>Cost of Purchase(in Rs)</th>
+		</tr>
+<?php
+		if ($result->num_rows > 0) {
+			while ($row = $result->fetch_assoc()) {
+				$pamt += $row["p_cost"];
+				echo "<tr>";
+				echo "<td>" . htmlspecialchars($row["p_id"]) . "</td>";
+				echo "<td>" . htmlspecialchars($row["sup_id"]) . "</td>";
+				echo "<td>" . htmlspecialchars($row["med_id"]) . "</td>";
+				echo "<td>" . htmlspecialchars($row["p_qty"]) . "</td>";
+				echo "<td>" . htmlspecialchars($row["pur_date"]) . "</td>";
+				echo "<td>" . htmlspecialchars($row["p_cost"]) . "</td>";
+				echo "</tr>";
 			}
-			
-			$res=mysqli_query($conn,"SELECT S_AMT('$start','$end') AS SAMT;") or die(mysqli_error($conn));
-			while($row=mysqli_fetch_array($res))
-			{
-				$samt=$row['SAMT'];
-				
-			} 
-			
-			$profit = $samt - $pamt;
-			$profits = number_format($profit, 2);
-	?>
-			
-		<table align="right" id="table1" style="margin-right:100px;">
-			<tr>
-				<th>Purchase ID</th>
-				<th>Supplier ID</th>
-				<th>Medicine ID</th>
-				
-				<th>Quantity</th>
-				<th>Date of Purchase</th>
-				<th>Cost of Purchase(in Rs)</th>
-			</tr>
-	<?php
-	$sql = "SELECT p_id,sup_id,med_id,p_qty,p_cost,pur_date FROM purchase 
-			WHERE pur_date >= '$start' AND pur_date <= '$end';";
-	$result = $conn->query($sql);
-	if ($result->num_rows > 0) {
-	
-		while($row = $result->fetch_assoc()) {
-			
-		echo "<tr>";
-			echo "<td>" . $row["p_id"]. "</td>";
-			echo "<td>" . $row["sup_id"]. "</td>";
-			echo "<td>" . $row["med_id"]. "</td>";
-			echo "<td>" . $row["p_qty"]. "</td>";
-			echo "<td>" . $row["pur_date"]. "</td>";
-			echo "<td>" . $row["p_cost"]. "</td>";
-			
-		echo "</tr>";
+		} else {
+			echo "<tr><td colspan='6' style='text-align:center;'>No purchases in this period.</td></tr>";
 		}
-	}
-	
-	echo "<tr>";
-	echo "<td colspan=5>Total</td>";
-	echo"<td >Rs.".$pamt."</td>";
-	echo "</tr>";
-	echo "</table>";
-	echo "</table>";
-	?>	
-	
+		$stmt->close();
+
+		echo "<tr>";
+		echo "<td colspan='5'>Total</td>";
+		echo "<td>Rs." . number_format($pamt, 2) . "</td>";
+		echo "</tr>";
+		echo "</table>";
+
+		// Sales in range
+		$stmt = $conn->prepare("SELECT sale_id, c_id, s_date, total_amt, e_id FROM sales
+				WHERE s_date BETWEEN ? AND ? ORDER BY s_date");
+		$stmt->bind_param("ss", $start, $end);
+		$stmt->execute();
+		$result = $stmt->get_result();
+		$samt = 0;
+?>
 	<table align="right" id="table1" style="margin-right:100px;">
 		<tr>
 			<th>Sale ID</th>
@@ -161,40 +169,40 @@ body {font-family:Arial;}
 			<th>Date</th>
 			<th>Sale Amount(in Rs)</th>
 		</tr>
-	
-	<?php
-	include "config.php";
-	$sql = "SELECT sale_id, c_id,s_date,s_time,total_amt,e_id FROM sales
-			WHERE s_date >= '$start' AND s_date <= '$end';";
-	$result = $conn->query($sql);
-	if ($result->num_rows > 0) {
-	
-		while($row = $result->fetch_assoc()) {
-			
-			
-		echo "<tr>";
-			echo "<td>" . $row["sale_id"]. "</td>";
-			echo "<td>" . $row["c_id"] . "</td>";
-			echo "<td>" . $row["e_id"]. "</td>";
-			echo "<td>" . $row["s_date"]."</td>";
-			echo "<td>" . $row["total_amt"]. "</td>";
-			
-		echo "</tr>";
+<?php
+		if ($result->num_rows > 0) {
+			while ($row = $result->fetch_assoc()) {
+				$samt += $row["total_amt"];
+				echo "<tr>";
+				echo "<td>" . htmlspecialchars($row["sale_id"]) . "</td>";
+				echo "<td>" . htmlspecialchars($row["c_id"]) . "</td>";
+				echo "<td>" . htmlspecialchars($row["e_id"]) . "</td>";
+				echo "<td>" . htmlspecialchars($row["s_date"]) . "</td>";
+				echo "<td>" . htmlspecialchars($row["total_amt"]) . "</td>";
+				echo "</tr>";
+			}
+		} else {
+			echo "<tr><td colspan='5' style='text-align:center;'>No sales in this period.</td></tr>";
 		}
-	echo "<tr>";
-	echo "<td colspan=4>Total</td>";
-	echo"<td >Rs.".$samt."</td>";
-	echo "</tr>";
-	echo "</table>";
-	}
-	?>
-	
+		$stmt->close();
+
+		echo "<tr>";
+		echo "<td colspan='4'>Total</td>";
+		echo "<td>Rs." . number_format($samt, 2) . "</td>";
+		echo "</tr>";
+		echo "</table>";
+?>
 	<table align="right" id="table1" style="margin-bottom:100px;margin-right:100px;">
 	<tr style="background-color: #f2f2f2;" >
 		<td>Transaction Amount </td>
-				<td>Rs.<?php echo $profits; }?></td>
+		<td>Rs.<?php echo number_format($samt - $pamt, 2); ?></td>
 	</tr>
 	</table>
+<?php
+	}
+}
+mysqli_close($conn);
+?>
 					
 </body>
 

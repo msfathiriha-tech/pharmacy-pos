@@ -69,44 +69,35 @@ Reports
 	
 	<center>
 	<div class="head">
-	<h2> STOCK EXPIRING WITHIN 6 MONTHS</h2>
+	<h2> EXPIRED STOCK &amp; STOCK EXPIRING WITHIN 6 MONTHS</h2>
 	</div>
 	</center>
 	
-	<table align="right" id="table1" style="margin-right:100px;">
-		<tr>
-			<th>Purchase ID</th>
-			<th>Supplier ID</th>
-			<th>Medicine ID</th>
-			<th>Quantity</th>
-			<th>Cost of Purchase</th>
-			<th>Date of Purchase</th>
-			<th>Manufacturing Date</th>
-			<th>Expiry Date</th>
-		</tr>
-</table>	
 	<?php
 
 include "config.php";
 
 /*
-   Show medicines whose expiry date is:
-   - today or later
-   - within the next 6 months
+   Expiry dates are stored per purchase (batch), not per medicine.
+   Show every batch that has:
+   - already expired, or
+   - expires within the next 6 months
+   Expired batches come first (oldest expiry at the top).
 */
 
-$sql = "SELECT p_id,
-               sup_id,
-               med_id,
-               p_qty,
-               p_cost,
-               pur_date,
-               mfg_date,
-               exp_date
-        FROM purchases
-        WHERE exp_date >= CURDATE()
-        AND exp_date <= DATE_ADD(CURDATE(), INTERVAL 6 MONTH)
-        ORDER BY exp_date ASC";
+$sql = "SELECT p.p_id,
+               p.sup_id,
+               p.med_id,
+               m.med_name,
+               p.p_qty,
+               p.pur_date,
+               p.mfg_date,
+               p.exp_date,
+               DATEDIFF(p.exp_date, CURDATE()) AS days_left
+        FROM purchase p
+        LEFT JOIN meds m ON m.med_id = p.med_id
+        WHERE p.exp_date <= DATE_ADD(CURDATE(), INTERVAL 6 MONTH)
+        ORDER BY p.exp_date ASC";
 
 $result = mysqli_query($conn, $sql);
 
@@ -120,13 +111,14 @@ if (!$result) {
 
     <tr>
         <th>Purchase ID</th>
-        <th>Supplier ID</th>
         <th>Medicine ID</th>
-        <th>Quantity</th>
-        <th>Cost of Purchase</th>
+        <th>Medicine Name</th>
+        <th>Supplier ID</th>
+        <th>Quantity Purchased</th>
         <th>Date of Purchase</th>
         <th>Manufacturing Date</th>
         <th>Expiry Date</th>
+        <th>Status</th>
     </tr>
 
 <?php
@@ -135,25 +127,42 @@ if (mysqli_num_rows($result) > 0) {
 
     while ($row = mysqli_fetch_assoc($result)) {
 
+        $daysLeft = (int) $row["days_left"];
+
+        if ($daysLeft < 0) {
+            $status = "Expired " . abs($daysLeft) . " day(s) ago";
+            $color  = "red";
+        } elseif ($daysLeft == 0) {
+            $status = "Expires today";
+            $color  = "red";
+        } else {
+            $status = "Expires in " . $daysLeft . " day(s)";
+            $color  = "darkorange";
+        }
+
+        $medName = $row["med_name"] !== null ? $row["med_name"] : "(medicine removed)";
+
         echo "<tr>";
 
         echo "<td>" . htmlspecialchars($row["p_id"]) . "</td>";
 
-        echo "<td>" . htmlspecialchars($row["sup_id"]) . "</td>";
-
         echo "<td>" . htmlspecialchars($row["med_id"]) . "</td>";
 
-        echo "<td>" . htmlspecialchars($row["p_qty"]) . "</td>";
+        echo "<td>" . htmlspecialchars($medName) . "</td>";
 
-        echo "<td>" . htmlspecialchars($row["p_cost"]) . "</td>";
+        echo "<td>" . htmlspecialchars($row["sup_id"]) . "</td>";
+
+        echo "<td>" . htmlspecialchars($row["p_qty"]) . "</td>";
 
         echo "<td>" . htmlspecialchars($row["pur_date"]) . "</td>";
 
         echo "<td>" . htmlspecialchars($row["mfg_date"]) . "</td>";
 
-        echo "<td style='color:red; font-weight:bold;'>"
+        echo "<td style='color:$color; font-weight:bold;'>"
              . htmlspecialchars($row["exp_date"])
              . "</td>";
+
+        echo "<td style='color:$color; font-weight:bold;'>" . $status . "</td>";
 
         echo "</tr>";
     }
@@ -161,8 +170,8 @@ if (mysqli_num_rows($result) > 0) {
 } else {
 
     echo "<tr>";
-    echo "<td colspan='8' style='text-align:center; color:green;'>";
-    echo "No medicines are expiring within the next 6 months.";
+    echo "<td colspan='9' style='text-align:center; color:green;'>";
+    echo "No expired stock and nothing expiring within the next 6 months.";
     echo "</td>";
     echo "</tr>";
 }

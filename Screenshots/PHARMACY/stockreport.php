@@ -73,23 +73,14 @@ Reports
 	</div>
 	</center>
 	
-	<table align="right" id="table1" style="margin-right:100px;">
-		<tr>
-			<th>Medicine ID</th>
-			<th>Medicine Name</th>
-			<th>Quantity Available</th>
-			<th>Category</th>
-			<th>Price</th>
-		</tr>
-		
 <?php
 
 include "config.php";
 
 $sql = "SELECT med_id, med_name, med_qty, category, med_price
-        FROM medicines
-        WHERE CAST(med_qty AS UNSIGNED) < 50
-        ORDER BY CAST(med_qty AS UNSIGNED) ASC";
+        FROM meds
+        WHERE med_qty < 50
+        ORDER BY med_qty ASC";
 
 $result = mysqli_query($conn, $sql);
 
